@@ -30,7 +30,7 @@ import {
   workflowIds,
   workflowValues,
 } from './devices.js';
-import { N8nClient, N8nError } from './n8n/client.js';
+import { N8nClient, N8nError, PAGE_SIZE } from './n8n/client.js';
 import { hostOf, isCloud, normalizeConfig } from './config.js';
 import { ProblemLog } from './problems.js';
 import { ACTION_TEXT, CONNECTION_TEXT, ERROR_TEXT, REPORT_TEXT, labelled, pick } from './texts.js';
@@ -55,6 +55,8 @@ export const HUB_TIMINGS = {
   heartbeatMs: 12 * 3600_000,
   // A scene action reads n8n again when the last read is older.
   freshMs: 15_000,
+  // A command waits that long, at most, for the read that follows it.
+  commandReadMs: 8_000,
   // The window of the failure counters.
   windowMs: 24 * 3600_000,
   // Failed reads in a row before "n8n is unreachable" fires (a restart of n8n
@@ -70,17 +72,30 @@ const MAX_SEEDS_PER_READ = 10;
 // Failures announced per cycle, at most (each reads the error of the run).
 const MAX_EVENTS_PER_READ = 10;
 
-const newer = (a, b) => {
-  if (!b) {
+const timeOf = (execution) => execution.stoppedAt ?? execution.startedAt ?? 0;
+
+/**
+ * Whether `execution` replaces `saved` as the last execution of a workflow:
+ * the same run that moved on (waiting, then finished), or a run that ended
+ * (or started, while unfinished) later — a long run failing after a shorter
+ * one succeeded is the last word.
+ */
+const supersedes = (execution, saved) => {
+  if (!saved) {
     return true;
   }
-  if (/^\d+$/.test(a.id) && /^\d+$/.test(b.id)) {
-    return Number(a.id) > Number(b.id);
+  if (execution.id === saved.id) {
+    return execution.status !== saved.status || execution.stoppedAt !== saved.stoppedAt;
   }
-  return (a.startedAt ?? 0) > (b.startedAt ?? 0);
+  const a = timeOf(execution);
+  const b = timeOf(saved);
+  if (a !== b) {
+    return a > b;
+  }
+  return /^\d+$/.test(execution.id) && /^\d+$/.test(saved.id)
+    ? Number(execution.id) > Number(saved.id)
+    : false;
 };
-
-const timeOf = (execution) => execution.stoppedAt ?? execution.startedAt ?? 0;
 
 export class N8nHub {
   /**
@@ -169,12 +184,16 @@ export class N8nHub {
         config.url && config.apiKey
           ? new N8nClient({ url: config.url, apiKey: config.apiKey, request: this.request })
           : null;
+      // A new key on the same instance keeps an outage under way: its
+      // "answers again" must still come, and "unreachable" not twice.
+      if (config.url !== previous.url || this.client === null) {
+        this.failedReads = 0;
+        this.unreachableSince = null;
+      }
       this.workflows = new Map();
       this.running = new Set();
       this.readAt = 0;
       this.error = null;
-      this.failedReads = 0;
-      this.unreachableSince = null;
       this.polling = null;
       // Another instance: what was learnt about the previous one is worthless.
       if (config.url && this.saved.url && this.saved.url !== config.url) {
@@ -230,10 +249,22 @@ export class N8nHub {
     await this.afterChanges(changed, { publish });
   }
 
-  /** Read after a command: a read already under way started before it. */
+  /**
+   * Read after a command: a read already under way started before it. Waited
+   * for `commandReadMs` at most, so a slow n8n does not turn a command that
+   * succeeded into a scene action that timed out; the read goes on behind.
+   */
   async pollAfterCommand() {
-    await this.polling?.catch(() => {});
-    await this.pollNow();
+    const read = (async () => {
+      await this.polling?.catch(() => {});
+      await this.pollNow();
+    })().catch((err) => logger.debug(`Read after a command failed: ${err.message}`));
+    let timer;
+    const late = new Promise((resolve) => {
+      timer = setTimeout(resolve, this.timings.commandReadMs);
+    });
+    await Promise.race([read, late]);
+    clearTimeout(timer);
   }
 
   /** Read again when the last read is older than `freshMs` (scene actions). */
@@ -289,11 +320,20 @@ export class N8nHub {
     // A workflow seen nowhere and never asked: its own last execution.
     const seen = new Set(recent.map((execution) => execution.workflowId));
     const seeds = new Map();
+    // A busy instance pushes the successes of the other workflows out of the
+    // latest page (the failures come back through status=error): a workflow
+    // last seen failing is then asked again, or it would stay "failed".
+    const full = recent.length >= PAGE_SIZE;
     for (const workflow of workflows) {
       if (seeds.size >= MAX_SEEDS_PER_READ) {
         break;
       }
-      if (!seen.has(workflow.id) && !(workflow.id in this.saved.last)) {
+      if (seen.has(workflow.id)) {
+        continue;
+      }
+      const saved = this.saved.last[workflow.id];
+      const unknown = !(workflow.id in this.saved.last);
+      if (unknown || (full && saved && FAILED.has(saved.status))) {
         const [last] = await client.executions({ workflowId: workflow.id, limit: 1 });
         seeds.set(workflow.id, last?.workflowId === workflow.id ? last : null);
       }
@@ -348,12 +388,18 @@ export class N8nHub {
     let dirty = false;
     const stateChanged = new Set();
     for (const [id, last] of seeds) {
-      this.saved.last[id] = last ? this.summary(last) : null;
-      dirty = true;
+      if (!last) {
+        if (!(id in this.saved.last)) {
+          this.saved.last[id] = null;
+          dirty = true;
+        }
+        continue;
+      }
+      recent.push(last);
     }
     for (const execution of [...recent, ...errors]) {
       const saved = this.saved.last[execution.workflowId];
-      if (newer(execution, saved)) {
+      if (supersedes(execution, saved)) {
         if (saved?.status !== execution.status) {
           stateChanged.add(execution.workflowId);
           widgetChanged = true;

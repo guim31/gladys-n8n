@@ -227,7 +227,14 @@ code de ce dépôt. Compléter ce fichier quand un nouveau piège est découvert
   10 par cycle) puis suivi par les dernières exécutions. `/data/n8n-state.json` : dernière exécution par
   workflow (`null` = jamais exécuté), échecs des 24 h par identifiant d'exécution (avec message et
   nœud), `initialized`, `url` (changer d'instance efface tout). Premier passage : rien n'est annoncé.
-  « n8n injoignable » après **deux** lectures en échec de suite, « répond de nouveau » au retour.
+  « n8n injoignable » après **deux** lectures en échec de suite, « répond de nouveau » au retour (une
+  nouvelle clé sur la même adresse garde la panne en cours).
+- **Dernière exécution** : la même exécution qui change (en attente, puis finie) la remplace ; sinon
+  c'est celle qui s'est terminée le plus tard (une longue exécution qui échoue après une courte
+  réussie est la dernière). Quand la page des 100 dernières est pleine, un workflow dont la dernière
+  exécution connue est en échec est relu (`workflowId`, plafond de 10) : ses succès peuvent être sortis
+  de la page, pas ses échecs (`status=error`). Une commande attend au plus 8 s la relecture qui la
+  suit (`timeout_seconds` des actions : 30 s).
 - **`input/binary` est vert à 1** : la fonctionnalité binaire est « Fonctionne » (0 = dernière
   exécution en échec), pas « En échec ».
 - L'interrupteur « Actif » est `read_only` tant que `allow_toggle` est faux (changer l'option change

@@ -188,7 +188,7 @@ test('a workflow absent from the latest executions is asked for its own last run
   assert.equal(world.hub.saved.last.monthlyWf0000001.id, old.id);
   assert.equal(world.hub.saved.last.aSOH0bkmpN2q4Us6, null, 'never run');
   await world.hub.pollNow();
-  assert.equal(asked(), 3, 'not asked again');
+  assert.equal(asked(), 4, 'only the failing backup is asked again: the latest page is full');
 });
 
 test('n8n unreachable: status, badges, one warning, one event after two reads, then back', async (t) => {
@@ -348,4 +348,78 @@ test('the internal timer reads n8n and publishes the changes, without any poll f
   assert.ok(world.n8n.requests.length > reads);
   const ids = idsOf(world, 'Greeting webhook');
   assert.equal(world.fake.lastState(ids.feature(FEATURE_KEYS.WORKING)), 0);
+});
+
+test('a run seen waiting, then failed, becomes the last execution; a long run failing last wins', async (t) => {
+  const world = await createWorld();
+  t.after(() => world.app.stop());
+  await createDevices(world);
+  const ids = idsOf(world, 'Greeting webhook');
+  const waiting = world.n8n.run('Greeting webhook', { status: 'waiting' });
+  await world.hub.pollNow();
+  assert.equal(world.fake.lastState(ids.feature(FEATURE_KEYS.STATE)), 'Waiting');
+  world.n8n.finish(waiting, 'error');
+  await world.hub.pollNow();
+  assert.equal(world.fake.lastState(ids.feature(FEATURE_KEYS.STATE)), 'Failed');
+  assert.equal(world.fake.lastState(ids.feature(FEATURE_KEYS.WORKING)), 0);
+
+  // A long run (started first) fails after a shorter one succeeded.
+  const long = world.n8n.run('Greeting webhook', { status: 'running' });
+  const short = world.n8n.run('Greeting webhook', { durationMs: 100 });
+  await world.hub.pollNow();
+  assert.equal(world.hub.saved.last['6YAGeXUth7pU5niX'].id, short.id);
+  world.n8n.finish(long, 'error');
+  await world.hub.pollNow();
+  assert.equal(world.hub.saved.last['6YAGeXUth7pU5niX'].id, long.id);
+  assert.equal(world.fake.lastState(ids.feature(FEATURE_KEYS.WORKING)), 0);
+});
+
+test('a busy instance: a workflow last seen failing is asked again for its last run', async (t) => {
+  const world = await createWorld();
+  t.after(() => world.app.stop());
+  await createDevices(world);
+  const ids = idsOf(world, 'Nightly backup');
+  assert.equal(world.fake.lastState(ids.feature(FEATURE_KEYS.WORKING)), 0);
+  world.n8n.run('Nightly backup');
+  for (let i = 0; i < 120; i += 1) {
+    world.n8n.run('Greeting webhook');
+  }
+  await world.hub.pollNow();
+  assert.equal(world.fake.lastState(ids.feature(FEATURE_KEYS.WORKING)), 1);
+  assert.equal(world.fake.lastState(ids.feature(FEATURE_KEYS.STATE)), 'Succeeded');
+});
+
+test('a new key during an outage keeps the pair "unreachable" / "answers again"', async (t) => {
+  const world = await createWorld();
+  t.after(() => world.app.stop());
+  world.n8n.down = 'ECONNREFUSED';
+  await world.hub.pollNow();
+  await world.hub.pollNow();
+  assert.equal(events(world, TRIGGERS.UNREACHABLE).length, 1);
+  await world.fake.configUpdated({ url: BASE, api_key: 'other', language: 'en' });
+  await world.fake.configUpdated({ url: BASE, api_key: API_KEY, language: 'en' });
+  assert.equal(events(world, TRIGGERS.UNREACHABLE).length, 1, 'not announced twice');
+  world.n8n.down = null;
+  await world.hub.pollNow();
+  assert.equal(events(world, TRIGGERS.BACK).length, 1);
+});
+
+test('a command does not wait for a slow read after it', async (t) => {
+  const world = await createWorld({ timings: { commandReadMs: 50 } });
+  t.after(() => world.app.stop());
+  const request = world.n8n.request;
+  world.hub.client.request = async (url, options) => {
+    if (new URL(url).pathname === '/api/v1/workflows') {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    return request(url, options);
+  };
+  const started = Date.now();
+  const ack = await world.fake.sceneAction('activate_workflow', {
+    device: idsOf(world, 'Nightly report').device,
+  });
+  assert.equal(ack.success, true, ack.error);
+  assert.ok(Date.now() - started < 250, 'answered before the slow read ended');
+  assert.equal(world.n8n.workflow('Nightly report').active, true);
+  await world.hub.polling?.catch(() => {});
 });
