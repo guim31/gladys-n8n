@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-17
+
 ### Added
 
 - One device per n8n workflow: active switch (read-only unless allowed in the
@@ -26,3 +28,6 @@ the notes of the version's GitHub Release.
   others.
 - "Test the connection" action, texts and documentation in English, French,
   German and Spanish.
+
+[Unreleased]: https://github.com/guim31/gladys-n8n/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/guim31/gladys-n8n/releases/tag/v1.0.0
