@@ -1,169 +1,202 @@
 // -----------------------------------------------------------------------------
-// Dashboard widgets (SDK v0.14+, Gladys 5.1+).
+// Dashboard widget (manifest `widgets`, Gladys 5.1+): `n8n`.
 //
-// A widget puts the integration's own data on the Gladys dashboard without a
-// dedicated core widget. The manifest `widgets` field declares its identity
-// (key, label, icon, optional per-instance `settings`); at runtime the
-// integration returns a DECLARATIVE content — `text`, `value`, `gauge`,
-// `status`, `chart`, `card-list`, `image`, `button` — that the core renders
-// with its own theme, dark mode and translations. No HTML, no CSS.
+// The use case: a glance at the wall tablet tells whether the automations ran
+// and which one fails. So the widget shows the active workflows, the failures
+// of the last 24 hours and the executions running, then one row per workflow
+// — the failing ones first, then the running ones, then the others — with
+// the state of the last execution and when it started.
 //
-// Each entry of WIDGETS is keyed by the widget `key` and exposes:
-//   - get(gladys, { settings, language, units, config }): the content,
-//     registered by index.js with `gladys.onWidgetGet(key, ...)`;
-//   - action(gladys, { actionKey, params, settings, config }) (optional): a
-//     tapped `button` carrying an `action`, registered with
-//     `gladys.onWidgetAction`.
+// The active workflows by default (an inactive one runs nothing), or the ones
+// chosen in the widget settings (devices added to Gladys). The figures are
+// sent as values, not bound to device features: the widget works before the
+// devices are added.
 //
-// Check your contents in the tests with `validateWidgetContent` (exported by
-// the SDK, see test/widgets.test.js), or run with DEBUG=gladys-integration-sdk
-// to have the SDK log every violation of the vocabulary and the budget.
+// Budget (8 components, 2 texts): three tiles, one text when n8n does not
+// answer, one status list of ten rows at most, a Refresh button.
 // -----------------------------------------------------------------------------
 
-import {
-  createLogger,
-  DEVICE_FEATURE_CATEGORIES,
-  DEVICE_TRANSPORTS,
-  WIDGET_COLORS,
-} from '@gladysassistant/integration-sdk';
-import { identifyDevice } from './devices/index.js';
-import { weatherStation } from './devices/weatherStation.js';
-import { plug } from './devices/plug.js';
-import { light } from './devices/light.js';
+import { WIDGET_COLORS } from '@gladysassistant/integration-sdk';
+import { lastFailed, stateOf } from './devices.js';
+import { WIDGET_KEY } from './hub.js';
+import { ACTIVE_TEXT, CONNECTION_TEXT, ERROR_TEXT, STATE_TEXT, formatTime, pick } from './texts.js';
 
-const logger = createLogger({ name: 'widgets' });
+// Action key of the button: permanent once published.
+export const ACTIONS = Object.freeze({ REFRESH: 'refresh' });
 
-// Widget key, as declared in the manifest `widgets` field.
-export const DEMO_STATUS_WIDGET = 'demo_status';
+export const MAX_ROWS = 10;
 
-// Keys of the `button` actions the demo_status content declares.
-const DEMO_STATUS_ACTIONS = { IDENTIFY_LIGHT: 'identify_light' };
-
-// How the plug transport reads in the status list.
-const TRANSPORT_STATUS = {
-  [DEVICE_TRANSPORTS.LOCAL]: { value: { en: 'Local', fr: 'Locale' }, color: WIDGET_COLORS.SUCCESS },
-  [DEVICE_TRANSPORTS.CLOUD]: { value: { en: 'Cloud', fr: 'Cloud' }, color: WIDGET_COLORS.INFO },
-  [DEVICE_TRANSPORTS.UNREACHABLE]: {
-    value: { en: 'Unreachable', fr: 'Injoignable' },
-    color: WIDGET_COLORS.DANGER,
+export const TEXT = {
+  empty: {
+    en: 'No active workflow: activate one in n8n, or choose workflows in the widget settings.',
+    fr: 'Aucun workflow actif : activez-en un dans n8n, ou choisissez des workflows dans les réglages du widget.',
+    de: 'Kein aktiver Workflow: Aktiviere einen in n8n oder wähle Workflows in den Widget-Einstellungen.',
+    es: 'Ningún workflow activo: active uno en n8n, o elija workflows en los ajustes del widget.',
+  },
+  active: { en: 'Active', fr: 'Actifs', de: 'Aktiv', es: 'Activos' },
+  failures: { en: 'Failures 24 h', fr: 'Échecs 24 h', de: 'Fehler 24 h', es: 'Fallos 24 h' },
+  running: { en: 'Running', fr: 'En cours', de: 'Laufend', es: 'En curso' },
+  more: { en: 'Others', fr: 'Autres', de: 'Weitere', es: 'Otros' },
+  refresh: { en: 'Refresh', fr: 'Actualiser', de: 'Aktualisieren', es: 'Actualizar' },
+  refreshed: {
+    en: 'n8n read again.',
+    fr: 'n8n relu.',
+    de: 'n8n neu gelesen.',
+    es: 'n8n leído de nuevo.',
   },
 };
 
-// A live tile references a feature by its external_id: read it from the
-// discovery payload itself, so the widget and the device never disagree.
-function featureExternalId(gladys, config, blueprint, category) {
-  const device = blueprint.buildDevice(gladys, config);
-  return device.features.find((feature) => feature.category === category).external_id;
+// Row order: what needs attention first.
+const rank = (view) => {
+  if (lastFailed(view) && !view.running) {
+    return 0;
+  }
+  if (view.running) {
+    return 1;
+  }
+  if (view.failures > 0) {
+    return 2;
+  }
+  return view.workflow.active ? 3 : 4;
+};
+
+const ROW_STYLE = {
+  success: { icon: 'check-circle', color: WIDGET_COLORS.SUCCESS },
+  error: { icon: 'x-circle', color: WIDGET_COLORS.DANGER },
+  crashed: { icon: 'x-octagon', color: WIDGET_COLORS.DANGER },
+  canceled: { icon: 'slash', color: WIDGET_COLORS.NEUTRAL },
+  running: { icon: 'play-circle', color: WIDGET_COLORS.INFO },
+  waiting: { icon: 'clock', color: WIDGET_COLORS.INFO },
+  new: { icon: 'play-circle', color: WIDGET_COLORS.INFO },
+  never: { icon: 'circle', color: WIDGET_COLORS.NEUTRAL },
+};
+const INACTIVE_STYLE = { icon: 'pause-circle', color: WIDGET_COLORS.NEUTRAL };
+
+const fit = (text, max) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
+
+function message(text, language) {
+  return {
+    ttl_seconds: 300,
+    components: [{ type: 'text', variant: 'body', text: pick(text, language) }],
+  };
 }
 
-function plugConnectionStatus(gladys, config) {
-  const { transport, degraded } = plug.transport(gladys, config);
-  const { value, color } = TRANSPORT_STATUS[transport];
-  if (degraded) {
-    return {
-      value: { en: `${value.en} (degraded mode)`, fr: `${value.fr} (mode dégradé)` },
-      color: WIDGET_COLORS.WARNING,
-    };
+/** The workflows the widget shows: the chosen devices, or every active workflow. */
+export function selectViews(hub, settings) {
+  const chosen = [settings?.workflows ?? []].flat().filter((id) => typeof id === 'string' && id);
+  if (chosen.length === 0) {
+    return hub.views().filter((view) => view.workflow.active);
   }
-  return { value, color };
+  return [...new Set(chosen)]
+    .map((id) => hub.find(id))
+    .filter(Boolean)
+    .map((workflow) => hub.view(workflow));
+}
+
+export function sortViews(views) {
+  return [...views].sort(
+    (a, b) => rank(a) - rank(b) || a.workflow.name.localeCompare(b.workflow.name),
+  );
+}
+
+function rowValue(view, language) {
+  const state = pick(STATE_TEXT[stateOf(view)], language);
+  const parts = [view.workflow.active ? state : pick(ACTIVE_TEXT.false, language)];
+  if (view.last?.startedAt) {
+    parts.push(formatTime(view.last.startedAt, language));
+  }
+  if (view.failures > 0) {
+    parts.push(`✗${view.failures}`);
+  }
+  return parts.join(' · ');
+}
+
+async function get(hub, { settings, language = 'en' }) {
+  const status = hub.connectionStatus();
+  if (!hub.client) {
+    return message(status.message ?? CONNECTION_TEXT.noKey, language);
+  }
+  const views = sortViews(selectViews(hub, settings));
+  if (views.length === 0 && !hub.error) {
+    return message(TEXT.empty, language);
+  }
+
+  const failures = views.reduce((sum, view) => sum + view.failures, 0);
+  const running = views.filter((view) => view.running).length;
+  const components = [
+    {
+      type: 'value',
+      value: views.filter((view) => view.workflow.active).length,
+      label: pick(TEXT.active, language),
+      icon: 'zap',
+      color: WIDGET_COLORS.PRIMARY,
+    },
+    {
+      type: 'value',
+      value: failures,
+      label: pick(TEXT.failures, language),
+      icon: 'x-circle',
+      color: failures > 0 ? WIDGET_COLORS.DANGER : WIDGET_COLORS.NEUTRAL,
+    },
+    {
+      type: 'value',
+      value: running,
+      label: pick(TEXT.running, language),
+      icon: 'play-circle',
+      color: running > 0 ? WIDGET_COLORS.INFO : WIDGET_COLORS.NEUTRAL,
+    },
+  ];
+
+  if (hub.error) {
+    components.push({
+      type: 'text',
+      variant: 'body',
+      text: pick(ERROR_TEXT[hub.error.kind], language),
+    });
+  }
+
+  if (views.length > 0) {
+    const shown = views.length > MAX_ROWS ? views.slice(0, MAX_ROWS - 1) : views;
+    const items = shown.map((view) => ({
+      label: fit(view.workflow.name, 40),
+      value: fit(rowValue(view, language), 40),
+      ...(view.workflow.active ? ROW_STYLE[stateOf(view)] : INACTIVE_STYLE),
+    }));
+    if (views.length > shown.length) {
+      items.push({
+        label: pick(TEXT.more, language),
+        value: `+${views.length - shown.length}`,
+        icon: 'more-horizontal',
+        color: WIDGET_COLORS.NEUTRAL,
+      });
+    }
+    components.push({ type: 'status', items });
+  }
+
+  components.push({
+    type: 'button',
+    label: pick(TEXT.refresh, language),
+    icon: 'refresh-cw',
+    style: 'secondary',
+    action: { key: ACTIONS.REFRESH },
+  });
+
+  // Something running or failing moves: refresh sooner.
+  const moving = hub.error || running > 0;
+  return { ttl_seconds: moving ? 30 : 60, components };
+}
+
+async function action(hub, { actionKey }) {
+  if (actionKey !== ACTIONS.REFRESH) {
+    throw new Error(`Unknown action ${actionKey}`);
+  }
+  await hub.pollNow();
+  if (hub.error) {
+    return { message: ERROR_TEXT[hub.error.kind] };
+  }
+  return { message: TEXT.refreshed };
 }
 
 export const WIDGETS = {
-  [DEMO_STATUS_WIDGET]: {
-    // `settings` holds the per-instance values of the declared `settings`
-    // (none here); `language` and `units` are those of the user viewing the
-    // dashboard, for the values you format yourself. Multi-language objects
-    // (`{ en, fr }`) are picked by the core, like everywhere else.
-    async get(gladys, { config }) {
-      logger.debug(`onWidgetGet <- ${DEMO_STATUS_WIDGET}`);
-      return {
-        // Reload policy: the computed parts below only change with the
-        // config, and index.js nudges the widget on every (re)connection and
-        // config update (see refreshWidgets) — the TTL is just a safety net.
-        ttl_seconds: 300,
-        components: [
-          // Device-bound tiles: LIVE, they follow the published states over
-          // the core's real-time path. No TTL, no nudge involved.
-          {
-            type: 'value',
-            label: { en: 'Temperature', fr: 'Température' },
-            icon: 'thermometer',
-            device_feature: featureExternalId(
-              gladys,
-              config,
-              weatherStation,
-              DEVICE_FEATURE_CATEGORIES.TEMPERATURE_SENSOR,
-            ),
-          },
-          {
-            type: 'value',
-            label: { en: 'Office plug', fr: 'Prise du bureau' },
-            icon: 'zap',
-            device_feature: featureExternalId(
-              gladys,
-              config,
-              plug,
-              DEVICE_FEATURE_CATEGORIES.ENERGY_SENSOR,
-            ),
-          },
-          // Computed rows: what the integration knows that no device feature
-          // carries. Served from the core cache until the TTL or a nudge.
-          {
-            type: 'status',
-            items: [
-              {
-                label: { en: 'Plug connection', fr: 'Connexion de la prise' },
-                icon: 'wifi',
-                ...plugConnectionStatus(gladys, config),
-              },
-              {
-                label: { en: 'Observed location', fr: 'Position observée' },
-                icon: 'map-pin',
-                value: `${config.latitude.toFixed(2)}, ${config.longitude.toFixed(2)}`,
-                color: WIDGET_COLORS.NEUTRAL,
-              },
-            ],
-          },
-          // `params` are declared HERE and sent back as-is: the handler never
-          // receives user input (a dashboard can hang on a public wall).
-          {
-            type: 'button',
-            label: { en: 'Identify the light', fr: 'Identifier la lampe' },
-            icon: 'eye',
-            style: 'secondary',
-            action: {
-              key: DEMO_STATUS_ACTIONS.IDENTIFY_LIGHT,
-              params: { device: light.deviceExternalId(gladys) },
-            },
-          },
-        ],
-      };
-    },
-
-    // Resolve an optional toast (string or multi-language object, ≤ 200
-    // characters). After a successful action the core drops the cached
-    // content and every open dashboard refetches it: no nudge needed.
-    async action(gladys, { actionKey, params, config }) {
-      logger.info(`onWidgetAction <- ${DEMO_STATUS_WIDGET}.${actionKey}`);
-      if (actionKey === DEMO_STATUS_ACTIONS.IDENTIFY_LIGHT) {
-        return identifyDevice(gladys, params.device, config);
-      }
-      // Throwing acks the action as failed: the message reaches the user.
-      throw new Error(`Unknown widget action: ${actionKey}`);
-    },
-  },
+  [WIDGET_KEY]: { get, action },
 };
-
-/**
- * Freshness nudge: ask the core to re-pull every widget NOW instead of
- * waiting for the content TTL. Call it when you KNOW a computed content
- * changed (here: the config, which drives the plug transport and the observed
- * location) — and after every (re)connection, since the nudges are
- * fire-and-forget: rate-limited core-side to 1 per 10 s per widget, dropped
- * silently while disconnected.
- */
-export function refreshWidgets(gladys) {
-  for (const key of Object.keys(WIDGETS)) {
-    gladys.requestWidgetRefresh(key);
-  }
-}

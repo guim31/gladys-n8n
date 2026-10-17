@@ -1,67 +1,178 @@
-# Template de démonstration
+# n8n
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+[n8n](https://n8n.io/) est un outil d'automatisation de workflows que l'on
+peut héberger soi-même : des nœuds reliés entre eux récupèrent des données,
+appellent des services, envoient des messages. Cette intégration amène vos
+workflows n8n dans Gladys : chaque workflow devient un appareil avec son état
+(actif ou non, dernière exécution réussie ou en échec, échecs des dernières
+24 heures), les scènes peuvent **lancer un workflow** par son nœud Webhook et
+utiliser sa réponse, réagir quand **n'importe quelle** exécution échoue ou quand
+n8n ne répond plus, et un widget de tableau de bord liste d'abord les workflows
+en échec.
 
-## Ce que vous obtenez
+Testée contre un vrai n8n 2.43 auto-hébergé (Docker) ; pas sur n8n Cloud (même
+API, non testé) : vos retours sont les bienvenus sur
+[les issues](https://github.com/guim31/gladys-n8n/issues).
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+## Ce qu'il faut
 
-## Configuration
+- Gladys Assistant 5.1.0 ou plus récent.
+- n8n 1.x ou 2.x, auto-hébergé, joignable depuis la machine de Gladys (n8n Cloud
+  devrait fonctionner aussi : même API).
+- Une clé d'API n8n (Settings → n8n API). L'API publique ne doit pas être
+  désactivée (`N8N_PUBLIC_API_DISABLED`).
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+À chaque actualisation (une minute par défaut), l'intégration envoie quatre
+requêtes à l'API de n8n, et quelques-unes de plus la première fois. n8n ne
+limite pas le débit de son API ; sur n8n Cloud, vérifiez les limites de votre
+offre.
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+## Mise en route
 
-## Actions
+### 1. Créer une clé d'API
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+Dans n8n, ouvrez **Settings → n8n API**, cliquez sur **Create an API key**,
+donnez-lui un nom (`Gladys`) et aucune expiration, puis copiez la clé : n8n ne
+l'affiche qu'une fois. Si votre n8n permet de choisir les droits (scopes) de la
+clé, cochez `workflow:list`, `workflow:activate`, `workflow:deactivate`,
+`execution:list` et `execution:read`. La clé voit les workflows de son
+propriétaire.
 
-## Scènes
+### 2. Configurer l'intégration
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
+Dans Gladys, ouvrez la configuration de l'intégration n8n :
 
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
+- **Adresse de n8n** : l'adresse avec laquelle vous ouvrez n8n, par exemple
+  `http://192.168.1.2:5678`. Une adresse IP seule reçoit le port 5678. Une URL
+  copiée depuis le navigateur convient aussi.
+- **Clé d'API** : la clé de l'étape 1.
+- **Intervalle d'actualisation** : de 30 secondes à 5 minutes.
+- **Autoriser l'activation des workflows depuis Gladys** : désactivé par
+  défaut, voir plus bas.
+- **Langue des noms** : langue des noms des fonctionnalités, des états et des
+  résultats de scène.
+
+Cliquez sur **Tester la connexion** : elle affiche les workflows, les actifs et
+les échecs des dernières 24 heures.
+
+### 3. Ajouter les workflows
+
+Ouvrez l'onglet **Découverte** de l'intégration et ajoutez les workflows à
+suivre, ainsi que l'appareil **n8n** si vous voulez les chiffres de toute
+l'instance. Rien n'est ajouté à votre place. Les déclencheurs de scène
+fonctionnent pour tous les workflows, ajoutés ou non.
+
+## Les appareils
+
+Chaque workflow (hors workflows archivés) donne un appareil :
+
+| Fonctionnalité                 | Valeur                                                          |
+| ------------------------------ | --------------------------------------------------------------- |
+| Actif                          | le workflow est actif (publié) ou non                           |
+| Dernière exécution             | Réussi, En échec, Planté, Annulé, En attente, En cours…         |
+| Fonctionne                     | Non si la dernière exécution a échoué, Oui sinon (vert / rouge) |
+| Échecs sur 24 h                | exécutions en échec sur les dernières 24 heures                 |
+| Dernier lancement              | début de la dernière exécution, jour/mois heures:minutes        |
+| Durée de la dernière exécution | en secondes                                                     |
+
+L'interrupteur **Actif** ne fait qu'afficher l'état par défaut. Avec
+**Autoriser l'activation des workflows depuis Gladys**, il active et désactive
+le workflow : cliquez sur **Mettre à jour** sur les appareils de l'onglet
+Découverte après avoir changé l'option.
+
+L'appareil **n8n** donne les **Workflows actifs**, les **Échecs sur 24 h** et
+les **Workflows au total**.
 
 ## Tableau de bord
 
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
+Le widget **Workflows n8n** affiche trois tuiles (workflows actifs, échecs sur
+24 heures, exécutions en cours), puis une ligne par workflow : ceux en échec
+d'abord, puis ceux en cours, puis les autres, avec l'état de la dernière
+exécution, son heure de début et les échecs du jour. Par défaut, il liste les
+workflows actifs ; choisissez-en d'autres dans ses réglages (appareils ajoutés
+à Gladys). Le bouton **Actualiser** relit n8n.
+
+## Scènes
+
+### Déclencheurs
+
+- **Une exécution de workflow échoue** : une exécution se termine en erreur
+  (ou plante). Filtre : les workflows (vide : tous). Informations transmises :
+  nom du workflow, message d'erreur, nœud en échec, numéro de l'exécution,
+  lien vers l'exécution dans n8n.
+- **n8n est injoignable** : deux lectures de suite ont échoué. Information
+  transmise : la raison.
+- **n8n répond de nouveau** : après avoir été injoignable, avec la durée de la
+  panne en minutes.
+
+La première lecture ne fait que noter ce qui s'est déjà passé : rien n'est
+annoncé pour le passé. Un échec survenu pendant un redémarrage de Gladys ou de
+l'intégration est annoncé une fois, à la lecture suivante.
+
+### Actions
+
+- **Lancer un workflow n8n** : l'API de n8n ne sait pas lancer un workflow, son
+  nœud **Webhook** si. Dans n8n, ajoutez un nœud déclencheur Webhook, réglez
+  sa **HTTP Method** sur `POST`, donnez-lui un **Path** (`gladys-bonjour`) et
+  activez le workflow. Dans la scène, indiquez ce chemin (ou l'**URL de
+  production** entière du nœud) et un corps : du JSON comme
+  `{"piece": "salon"}`, ou un texte envoyé sous la forme `{"text": "…"}` ; les
+  valeurs de la scène peuvent y être insérées. Résultats : réponse réussie,
+  statut HTTP (0 sans réponse sous 25 secondes), message répondu (le champ
+  `message` ou `text` de la réponse), réponse complète. Pour obtenir une
+  réponse, réglez **Respond** sur « When Last Node Finishes » ou utilisez un
+  nœud « Respond to Webhook » ; un workflow de plus de 25 secondes doit
+  répondre tout de suite.
+- **État d'un workflow** : actif ou non, dernière exécution en échec ou non,
+  état, échecs sur 24 h, dernier lancement, durée, dernière erreur et une
+  phrase toute faite, pour les actions suivantes (un message, une condition).
+- **Activer un workflow** / **Désactiver un workflow** : par exemple un
+  workflow qui ne doit tourner que pendant les vacances. Ces actions
+  fonctionnent quelle que soit l'option de l'interrupteur.
+
+### Idées de scènes
+
+- **Une exécution de workflow échoue** → envoyer un message : « n8n : {workflow}
+  a échoué dans {nœud} : {erreur} » avec le lien vers l'exécution.
+- Un bouton du tableau de bord ou « Je pars » → **Lancer un workflow n8n**
+  `gladys-depart` avec `{"utilisateur": "…"}`, puis envoyer le **Message
+  répondu** par le workflow.
+- **n8n est injoignable** → envoyer un message et allumer une lumière du
+  bureau.
+- Chaque matin → **État d'un workflow** « Sauvegarde de nuit » → continuer
+  seulement si « Dernière exécution en échec » est vrai → envoyer la
+  **Phrase**.
 
 ## Dépannage
 
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+- **Clé d'API refusée** : la clé a été supprimée, a expiré ou a été copiée
+  incomplètement. Créez-en une nouvelle.
+- **Refusé par n8n : il manque un droit à la clé d'API** : donnez à la clé les
+  droits de l'étape 1, ou utilisez une clé du propriétaire du workflow.
+- **Aucune API n8n à cette adresse** : vérifiez l'adresse (port 5678 par
+  défaut) et que l'API publique est activée. Derrière un proxy inverse avec un
+  sous-chemin, mettez le sous-chemin dans l'adresse.
+- **L'adresse redirige** : saisissez l'adresse en `https://`.
+- **Certificat refusé** : un certificat auto-signé n'est pas accepté ; utilisez
+  l'adresse en `http://` sur le réseau local.
+- **Le webhook répond 404 « not registered »** : le workflow n'est pas actif, le
+  chemin est faux, ou le nœud Webhook n'accepte pas `POST`. Une URL de test
+  (`/webhook-test/`) ne marche que pendant que l'éditeur écoute.
+- **Aucun échec n'est vu** : n8n doit enregistrer les exécutions en échec
+  (`EXECUTIONS_DATA_SAVE_ON_ERROR`, activé par défaut). Des exécutions réussies
+  non enregistrées (`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`) laissent « Dernière
+  exécution » sur le dernier échec.
+- Logs : dans Gladys, la page de l'intégration montre les logs de son
+  conteneur ; `LOG_LEVEL=debug` détaille chaque lecture.
+
+## Limites
+
+- Une instance n8n par configuration ; la clé voit les workflows de son
+  propriétaire.
+- Les workflows ne sont ni créés ni modifiés depuis Gladys.
+- La première lecture compte au plus 500 exécutions en échec des dernières
+  24 heures, et au plus 10 échecs sont annoncés par lecture.
+- Le corps du webhook est en JSON seulement ; les webhooks protégés par en-tête
+  ou par authentification basique ne sont pas pris en charge (utilisez un
+  chemin difficile à deviner).
+- n8n Cloud n'est pas testé.

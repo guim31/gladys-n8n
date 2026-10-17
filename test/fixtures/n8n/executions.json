@@ -1,0 +1,77 @@
+{
+  "data": [
+    {
+      "id": "6",
+      "finished": true,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "success",
+      "startedAt": "2026-10-17T18:14:11.200Z",
+      "stoppedAt": "2026-10-17T18:14:11.236Z",
+      "workflowId": "6YAGeXUth7pU5niX",
+      "waitTill": null
+    },
+    {
+      "id": "5",
+      "finished": true,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "success",
+      "startedAt": "2026-10-17T18:12:58.975Z",
+      "stoppedAt": "2026-10-17T18:13:18.995Z",
+      "workflowId": "FQwWCCUZFVdu0Dgu",
+      "waitTill": null
+    },
+    {
+      "id": "4",
+      "finished": false,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "error",
+      "startedAt": "2026-10-17T18:12:58.858Z",
+      "stoppedAt": "2026-10-17T18:12:58.901Z",
+      "workflowId": "aGj6DwvpiN4Gpcmd",
+      "waitTill": null
+    },
+    {
+      "id": "3",
+      "finished": false,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "error",
+      "startedAt": "2026-10-17T18:11:53.857Z",
+      "stoppedAt": "2026-10-17T18:11:53.910Z",
+      "workflowId": "GFfOrnPCmR5eGKRq",
+      "waitTill": null
+    },
+    {
+      "id": "2",
+      "finished": false,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "error",
+      "startedAt": "2026-10-17T18:11:46.537Z",
+      "stoppedAt": "2026-10-17T18:11:46.715Z",
+      "workflowId": "GFfOrnPCmR5eGKRq",
+      "waitTill": null
+    },
+    {
+      "id": "1",
+      "finished": true,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "success",
+      "startedAt": "2026-10-17T18:11:46.289Z",
+      "stoppedAt": "2026-10-17T18:11:46.456Z",
+      "workflowId": "6YAGeXUth7pU5niX",
+      "waitTill": null
+    }
+  ],
+  "nextCursor": null
+}
