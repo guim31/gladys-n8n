@@ -16,8 +16,8 @@ its only runtime dependency. It started from the official JavaScript template.
 ```bash
 npm install
 npm test                                  # node --test, the built-in runner
-node --test test/devices.test.js          # one file
-node --test --test-name-pattern "plug"    # tests whose name matches
+node --test test/hub.test.js              # one file
+node --test --test-name-pattern "fails"   # tests whose name matches
 npm run lint                              # ESLint
 npm run format:check                      # Prettier, as the CI runs it
 npm run format                            # Prettier, fix in place
@@ -31,16 +31,20 @@ pushing.
 ## Architecture
 
 ```
-index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
+index.js                          SDK wiring only: src/app.js registers the handlers before connect()
+src/app.js                        every SDK handler -> the hub (also used by the tests)
+src/hub.js                        reading timer, states, failures -> scene events, commands, views
+src/devices.js                    one device per workflow + the instance device: features, names, values
+src/n8n/client.js                 public API v1 + webhooks (fetch), errors by kind, normalization
 src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
+src/widgets.js                    dashboard widget `n8n` (manifest `widgets`)
+src/texts.js                      connection, error, state, report and action texts (4 languages), dates
 src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
+src/store.js, src/problems.js     /data/n8n-state.json; one log line per repeated failure
 gladys-assistant-integration.json manifest: name, config_schema, actions, image...
-docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
+docs/{en,fr,de,es}.md             user documentation, re-hosted by Gladys (en and fr mandatory)
 test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
+                                  and helpers/fakeN8n.js (checked against test/fixtures/n8n)
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
 
@@ -70,8 +74,10 @@ test/                             node --test, against the SDK's fake Gladys (in
   `type: "provider"`: 5.1.0). `test/manifest.test.js` ties the manifest to the
   code (defaults, action, scene and widget handlers): change both sides
   together.
-- **User-facing text** is bilingual (English and French): action messages,
-  manifest texts, and `docs/en.md` / `docs/fr.md`, kept in sync.
+- **User-facing text** exists in English, French, German and Spanish: action
+  messages, widget content, feature names, scene outputs, manifest texts, and
+  `docs/en.md`, `docs/fr.md`, `docs/de.md`, `docs/es.md`, kept in sync
+  (`test/i18n.test.js` checks the languages and the doc sections).
 - **Style.** Prettier formats, ESLint catches mistakes. Comments explain why,
   in English. Tests never touch the network.
 
@@ -197,6 +203,66 @@ code de ce dépôt. Compléter ce fichier quand un nouveau piège est découvert
 - Les filtres de scène ne font qu'égalité et appartenance : un seuil reste le travail d'un capteur.
 - **Les clés de widgets, de déclencheurs et d'actions sont figées une fois publiées.**
 - `gladys_version` `>=5.1.0` dès qu'il y a widgets, déclencheurs ou actions de scène.
+
+## n8n (propre à ce dépôt)
+
+- **API publique v1**, en-tête `X-N8N-API-KEY` (clé d'un utilisateur : elle voit ses workflows).
+  Lues : `GET /api/v1/workflows` (pages par `nextCursor`, `limit` ≤ 250, `isArchived` à écarter),
+  `GET /api/v1/executions` (plus récentes d'abord, filtres `status` et `workflowId`), `GET
+/api/v1/executions/<id>?includeData=true` (erreur dans `data.resultData.error.message`,
+  nœud dans `lastNodeExecuted`). Commandes : `POST /api/v1/workflows/<id>/activate|deactivate`
+  (200 même déjà actif). **Aucun « run »** : un workflow se lance par son webhook de production
+  `POST <base>/webhook/<path>`, sans clé.
+- **Pièges vérifiés sur n8n 2.43.7** : la liste par défaut des exécutions **omet celles en cours**
+  (`status=running` les donne) ; un statut `crashed` n'est pas renvoyé par `status=error` (lu dans la
+  liste par défaut) ; les identifiants d'exécution sont des chaînes numériques croissantes ; le
+  message d'un nœud Code finit par ` [line 1]` (retiré). Les **scopes de clé sont appliqués** même
+  en édition communautaire (403 « Forbidden » : `tag:create` manquait) ; mauvaise clé : 401
+  « Unauthorized ». Webhook inconnu ou workflow inactif : 404 « … is not registered » ; workflow en
+  erreur avec « When Last Node Finishes » : 500 `{"message":"Error in workflow"}` ; « Immediately » :
+  200 `{"message":"Workflow was started"}`. Une activation juste faite peut répondre 404 au premier
+  appel du webhook (enregistrement asynchrone), constaté une fois.
+- Lecture par cycle : workflows, 100 dernières exécutions, celles en cours, échecs des 24 h (jusqu'à
+  5 pages). Un workflow absent de tout ça est interrogé **une fois** (`workflowId=…&limit=1`, au plus
+  10 par cycle) puis suivi par les dernières exécutions. `/data/n8n-state.json` : dernière exécution par
+  workflow (`null` = jamais exécuté), échecs des 24 h par identifiant d'exécution (avec message et
+  nœud), `initialized`, `url` (changer d'instance efface tout). Premier passage : rien n'est annoncé.
+  « n8n injoignable » après **deux** lectures en échec de suite, « répond de nouveau » au retour (une
+  nouvelle clé sur la même adresse garde la panne en cours).
+- **Dernière exécution** : la même exécution qui change (en attente, puis finie) la remplace ; sinon
+  c'est celle qui s'est terminée le plus tard (une longue exécution qui échoue après une courte
+  réussie est la dernière). Quand la page des 100 dernières est pleine, un workflow dont la dernière
+  exécution connue est en échec est relu (`workflowId`, plafond de 10) : ses succès peuvent être sortis
+  de la page, pas ses échecs (`status=error`). Une commande attend au plus 8 s la relecture qui la
+  suit (`timeout_seconds` des actions : 30 s).
+- **`input/binary` est vert à 1** : la fonctionnalité binaire est « Fonctionne » (0 = dernière
+  exécution en échec), pas « En échec ».
+- L'interrupteur « Actif » est `read_only` tant que `allow_toggle` est faux (changer l'option change
+  la structure : « Mettre à jour » dans Découverte). Les actions de scène activer/désactiver marchent
+  quelle que soit l'option (choix explicite dans une scène).
+- Le chemin d'un webhook est souvent son seul secret : **jamais journalisé**. Une URL complète
+  d'un autre hôte est acceptée si son chemin contient `/webhook/` (n8n derrière un proxy annonce
+  `WEBHOOK_URL`).
+
+## Vérifié sur un vrai n8n
+
+Le 17/10/2026, image Docker de l'intégration lancée avec les contraintes du bac à sable de Gladys
+(`--cap-drop ALL --security-opt no-new-privileges --read-only --memory 256m --pids-limit 256`, volume
+`/data`, réseau en pont) contre `n8nio/n8n` **2.43.7** (SQLite) : propriétaire et clé d'API créés,
+cinq workflows importés par l'API (webhook qui répond, deux qui échouent, un lent de 20 s, une
+planification jamais exécutée).
+
+- **Sans Gladys** : reconnexion du SDK en backoff, pas de plantage, aucun secret dans les logs,
+  ~17 Mo au repos, arrêt propre sur SIGTERM (code 0).
+- **Intégration complète** (faux Gladys du SDK, noms en français, `TZ=Europe/Paris`) : découverte des
+  5 workflows et de l'instance, états, badge `local`, « Tester la connexion », « Lancer un workflow
+  n8n » (réponse 200 et `message`, 500, 404, URL de production, réponse après 20 s), deux échecs
+  réels annoncés une fois chacun avec message et nœud, rien de plus au redémarrage sur le même
+  `/data`, « État d'un workflow », interrupteur et actions activer/désactiver, widget validé
+  (`validateWidgetContent`), mauvaise clé et mauvais chemin, n8n gelé (`docker pause`) : « injoignable »
+  après deux lectures, puis « répond de nouveau ». ~89 Mo RSS pendant le test.
+- Non vérifié : n8n Cloud, une instance Gladys réelle (rendu du widget, éditeur de scènes), n8n
+  derrière un proxy avec sous-chemin, une instance avec des centaines de workflows.
 
 ## Store
 

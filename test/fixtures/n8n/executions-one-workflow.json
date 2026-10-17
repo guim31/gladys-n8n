@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "id": "6",
+      "finished": true,
+      "mode": "webhook",
+      "retryOf": null,
+      "retrySuccessId": null,
+      "status": "success",
+      "startedAt": "2026-10-17T18:14:11.200Z",
+      "stoppedAt": "2026-10-17T18:14:11.236Z",
+      "workflowId": "6YAGeXUth7pU5niX",
+      "waitTill": null
+    }
+  ],
+  "nextCursor": "eyJsYXN0SWQiOiI2IiwibGltaXQiOjF9"
+}

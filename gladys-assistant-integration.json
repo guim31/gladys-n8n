@@ -1,177 +1,702 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "n8n",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Your n8n workflows in Gladys: start them from a scene, react when one fails.",
+    "fr": "Vos workflows n8n dans Gladys : lancez-les depuis une scène, réagissez quand l'un échoue.",
+    "de": "Deine n8n-Workflows in Gladys: Starte sie aus einer Szene, reagiere, wenn einer fehlschlägt.",
+    "es": "Sus workflows de n8n en Gladys: láncelos desde una escena, reaccione cuando uno falle."
   },
   "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "docker_image": "ghcr.io/guim31/gladys-n8n:1.0.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/guim31/gladys-n8n/main/cover.png",
+  "categories": ["services"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Your n8n",
+        "fr": "Votre n8n",
+        "de": "Dein n8n",
+        "es": "Su n8n"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "In n8n, open Settings → n8n API, create an API key and paste it below with the address of n8n. Then add the workflows to follow from the Discover tab.",
+        "fr": "Dans n8n, ouvrez Settings → n8n API, créez une clé d'API et collez-la ci-dessous avec l'adresse de n8n. Ajoutez ensuite les workflows à suivre depuis l'onglet Découverte.",
+        "de": "Öffne in n8n Settings → n8n API, erstelle einen API-Schlüssel und füge ihn unten mit der Adresse von n8n ein. Füge dann die zu verfolgenden Workflows im Tab „Entdecken“ hinzu.",
+        "es": "En n8n, abra Settings → n8n API, cree una clave de API y péguela abajo con la dirección de n8n. Después añada los workflows que quiera seguir desde la pestaña Descubrir."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/guim31/gladys-n8n/blob/main/docs/en.md",
+          "label": {
+            "en": "Setup guide",
+            "fr": "Guide d'installation",
+            "de": "Einrichtungsanleitung",
+            "es": "Guía de instalación"
+          }
+        },
+        {
+          "url": "https://docs.n8n.io/api/authentication/",
+          "label": {
+            "en": "n8n API keys",
+            "fr": "Clés d'API n8n",
+            "de": "n8n-API-Schlüssel",
+            "es": "Claves de API de n8n"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "key": "url",
+      "type": "string",
+      "label": {
+        "en": "n8n address",
+        "fr": "Adresse de n8n",
+        "de": "n8n-Adresse",
+        "es": "Dirección de n8n"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "description": {
+        "en": "The address you open n8n with. Port 5678 is added to a bare IP address.",
+        "fr": "L'adresse avec laquelle vous ouvrez n8n. Le port 5678 est ajouté à une adresse IP seule.",
+        "de": "Die Adresse, mit der du n8n öffnest. Zu einer reinen IP-Adresse wird Port 5678 ergänzt.",
+        "es": "La dirección con la que abre n8n. A una dirección IP sola se le añade el puerto 5678."
+      },
+      "placeholder": {
+        "en": "e.g. http://192.168.1.2:5678",
+        "fr": "ex. http://192.168.1.2:5678",
+        "de": "z. B. http://192.168.1.2:5678",
+        "es": "p. ej. http://192.168.1.2:5678"
+      },
+      "required": false
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+      "key": "api_key",
+      "type": "secret",
+      "label": {
+        "en": "API key",
+        "fr": "Clé d'API",
+        "de": "API-Schlüssel",
+        "es": "Clave de API"
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+      "description": {
+        "en": "Created in Settings → n8n API. It sees the workflows of its owner.",
+        "fr": "Créée dans Settings → n8n API. Elle voit les workflows de son propriétaire.",
+        "de": "Erstellt unter Settings → n8n API. Er sieht die Workflows seines Besitzers.",
+        "es": "Creada en Settings → n8n API. Ve los workflows de su propietario."
+      },
+      "required": false
     },
     {
-      "key": "unit",
+      "key": "options",
+      "type": "section",
+      "label": {
+        "en": "Options",
+        "fr": "Options",
+        "de": "Optionen",
+        "es": "Opciones"
+      }
+    },
+    {
+      "key": "poll_interval",
       "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "label": {
+        "en": "Refresh interval",
+        "fr": "Intervalle d'actualisation",
+        "de": "Aktualisierungsintervall",
+        "es": "Intervalo de actualización"
+      },
+      "description": {
+        "en": "How often n8n is read: four API requests or more each time.",
+        "fr": "La fréquence de lecture de n8n : au moins quatre requêtes d'API à chaque fois.",
+        "de": "Wie oft n8n gelesen wird: jedes Mal mindestens vier API-Anfragen.",
+        "es": "Con qué frecuencia se lee n8n: al menos cuatro peticiones de API cada vez."
+      },
       "required": false,
-      "default": "celsius",
+      "default": "60",
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        {
+          "value": "30",
+          "label": {
+            "en": "30 seconds",
+            "fr": "30 secondes",
+            "de": "30 Sekunden",
+            "es": "30 segundos"
+          }
+        },
+        {
+          "value": "60",
+          "label": {
+            "en": "1 minute",
+            "fr": "1 minute",
+            "de": "1 Minute",
+            "es": "1 minuto"
+          }
+        },
+        {
+          "value": "120",
+          "label": {
+            "en": "2 minutes",
+            "fr": "2 minutes",
+            "de": "2 Minuten",
+            "es": "2 minutos"
+          }
+        },
+        {
+          "value": "300",
+          "label": {
+            "en": "5 minutes",
+            "fr": "5 minutes",
+            "de": "5 Minuten",
+            "es": "5 minutos"
+          }
+        }
       ]
     },
     {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "key": "allow_toggle",
+      "type": "boolean",
+      "label": {
+        "en": "Allow switching workflows from Gladys",
+        "fr": "Autoriser l'activation des workflows depuis Gladys",
+        "de": "Workflows aus Gladys schalten erlauben",
+        "es": "Permitir activar workflows desde Gladys"
+      },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "Off: the Active switch only shows the state. On: it activates and deactivates the workflow (then click Update in the Discover tab).",
+        "fr": "Désactivé : l'interrupteur Actif ne fait qu'afficher l'état. Activé : il active et désactive le workflow (cliquez ensuite sur Mettre à jour dans l'onglet Découverte).",
+        "de": "Aus: Der Schalter „Aktiv“ zeigt nur den Zustand. An: Er aktiviert und deaktiviert den Workflow (klicke danach im Tab „Entdecken“ auf „Aktualisieren“).",
+        "es": "Desactivado: el interruptor Activo solo muestra el estado. Activado: activa y desactiva el workflow (después pulse Actualizar en la pestaña Descubrir)."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": false
+    },
+    {
+      "key": "language",
+      "type": "select",
+      "label": {
+        "en": "Language of the names",
+        "fr": "Langue des noms",
+        "de": "Sprache der Namen",
+        "es": "Idioma de los nombres"
+      },
+      "description": {
+        "en": "Language of the feature names (set when a device is added), of the states and of the scene results.",
+        "fr": "Langue des noms des fonctionnalités (fixés à l'ajout d'un appareil), des états et des résultats de scène.",
+        "de": "Sprache der Funktionsnamen (beim Hinzufügen eines Geräts festgelegt), der Zustände und der Szenenergebnisse.",
+        "es": "Idioma de los nombres de las funciones (fijados al añadir un dispositivo), de los estados y de los resultados de escena."
+      },
+      "required": false,
+      "default": "fr",
+      "options": [
+        {
+          "value": "en",
+          "label": {
+            "en": "English",
+            "fr": "Anglais",
+            "de": "Englisch",
+            "es": "Inglés"
+          }
+        },
+        {
+          "value": "fr",
+          "label": {
+            "en": "French",
+            "fr": "Français",
+            "de": "Französisch",
+            "es": "Francés"
+          }
+        },
+        {
+          "value": "de",
+          "label": {
+            "en": "German",
+            "fr": "Allemand",
+            "de": "Deutsch",
+            "es": "Alemán"
+          }
+        },
+        {
+          "value": "es",
+          "label": {
+            "en": "Spanish",
+            "fr": "Espagnol",
+            "de": "Spanisch",
+            "es": "Español"
+          }
+        }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
-    },
-    {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
+      "key": "test_connection",
+      "label": {
+        "en": "Test the connection",
+        "fr": "Tester la connexion",
+        "de": "Verbindung testen",
+        "es": "Probar la conexión"
+      },
+      "timeout_seconds": 60
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "execution_failed",
+      "label": {
+        "en": "A workflow execution fails",
+        "fr": "Une exécution de workflow échoue",
+        "de": "Eine Workflow-Ausführung schlägt fehl",
+        "es": "Una ejecución de workflow falla"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "An execution of an n8n workflow ends in error, with the node and the error message.",
+        "fr": "Une exécution d'un workflow n8n se termine en erreur, avec le nœud et le message d'erreur.",
+        "de": "Eine Ausführung eines n8n-Workflows endet mit einem Fehler, mit dem Knoten und der Fehlermeldung.",
+        "es": "Una ejecución de un workflow de n8n termina en error, con el nodo y el mensaje de error."
       },
       "fields": [
         {
           "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
           "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
+          "source": "devices",
+          "label": {
+            "en": "Workflows (empty: any)",
+            "fr": "Workflows (vide : tous)",
+            "de": "Workflows (leer: alle)",
+            "es": "Workflows (vacío: todos)"
+          }
         }
       ],
       "variables": [
         {
-          "key": "target",
+          "key": "workflow",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "label": {
+            "en": "Workflow name",
+            "fr": "Nom du workflow",
+            "de": "Name des Workflows",
+            "es": "Nombre del workflow"
+          }
+        },
+        {
+          "key": "error",
+          "type": "string",
+          "label": {
+            "en": "Error message",
+            "fr": "Message d'erreur",
+            "de": "Fehlermeldung",
+            "es": "Mensaje de error"
+          }
+        },
+        {
+          "key": "node",
+          "type": "string",
+          "label": {
+            "en": "Failing node",
+            "fr": "Nœud en échec",
+            "de": "Fehlerhafter Knoten",
+            "es": "Nodo con error"
+          }
+        },
+        {
+          "key": "execution_id",
+          "type": "string",
+          "label": {
+            "en": "Execution number",
+            "fr": "Numéro de l'exécution",
+            "de": "Nummer der Ausführung",
+            "es": "Número de la ejecución"
+          }
+        },
+        {
+          "key": "execution_url",
+          "type": "string",
+          "label": {
+            "en": "Link to the execution",
+            "fr": "Lien vers l'exécution",
+            "de": "Link zur Ausführung",
+            "es": "Enlace a la ejecución"
+          }
+        }
+      ]
+    },
+    {
+      "key": "n8n_unreachable",
+      "label": {
+        "en": "n8n is unreachable",
+        "fr": "n8n est injoignable",
+        "de": "n8n ist nicht erreichbar",
+        "es": "n8n no está accesible"
+      },
+      "description": {
+        "en": "n8n stops answering (two failed reads in a row): your automations may no longer run.",
+        "fr": "n8n ne répond plus (deux lectures en échec de suite) : vos automatisations ne tournent peut-être plus.",
+        "de": "n8n antwortet nicht mehr (zwei fehlgeschlagene Abfragen in Folge): Deine Automatisierungen laufen vielleicht nicht mehr.",
+        "es": "n8n deja de responder (dos lecturas fallidas seguidas): puede que sus automatizaciones ya no se ejecuten."
+      },
+      "variables": [
+        {
+          "key": "error",
+          "type": "string",
+          "label": {
+            "en": "Reason",
+            "fr": "Raison",
+            "de": "Grund",
+            "es": "Motivo"
+          }
+        }
+      ]
+    },
+    {
+      "key": "n8n_back",
+      "label": {
+        "en": "n8n answers again",
+        "fr": "n8n répond de nouveau",
+        "de": "n8n antwortet wieder",
+        "es": "n8n responde de nuevo"
+      },
+      "description": {
+        "en": "n8n answers again after being unreachable, with the length of the outage.",
+        "fr": "n8n répond de nouveau après avoir été injoignable, avec la durée de la panne.",
+        "de": "n8n antwortet wieder, nachdem es nicht erreichbar war, mit der Dauer des Ausfalls.",
+        "es": "n8n responde de nuevo tras no estar accesible, con la duración de la caída."
+      },
+      "variables": [
+        {
+          "key": "downtime_minutes",
+          "type": "number",
+          "label": {
+            "en": "Outage length (minutes)",
+            "fr": "Durée de la panne (minutes)",
+            "de": "Dauer des Ausfalls (Minuten)",
+            "es": "Duración de la caída (minutos)"
+          }
         }
       ]
     }
   ],
   "scene_actions": [
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+      "key": "run_workflow",
+      "label": {
+        "en": "Start an n8n workflow",
+        "fr": "Lancer un workflow n8n",
+        "de": "n8n-Workflow starten",
+        "es": "Iniciar un workflow de n8n"
       },
-      "timeout_seconds": 15,
+      "description": {
+        "en": "Calls the Webhook node of an active workflow with a JSON body, and hands its answer to the next actions.",
+        "fr": "Appelle le nœud Webhook d'un workflow actif avec un corps JSON, et passe sa réponse aux actions suivantes.",
+        "de": "Ruft den Webhook-Knoten eines aktiven Workflows mit einem JSON-Inhalt auf und gibt seine Antwort an die nächsten Aktionen weiter.",
+        "es": "Llama al nodo Webhook de un workflow activo con un cuerpo JSON y pasa su respuesta a las acciones siguientes."
+      },
+      "timeout_seconds": 30,
+      "fields": [
+        {
+          "key": "path",
+          "type": "string",
+          "label": {
+            "en": "Webhook path or Production URL",
+            "fr": "Chemin du webhook ou URL de production",
+            "de": "Webhook-Pfad oder Production URL",
+            "es": "Ruta del webhook o URL de producción"
+          },
+          "description": {
+            "en": "The Path of the Webhook node (HTTP method POST), or its whole Production URL.",
+            "fr": "Le champ Path du nœud Webhook (méthode HTTP POST), ou son URL de production entière.",
+            "de": "Das Feld Path des Webhook-Knotens (HTTP-Methode POST) oder seine ganze Production URL.",
+            "es": "El campo Path del nodo Webhook (método HTTP POST), o su URL de producción completa."
+          },
+          "placeholder": {
+            "en": "e.g. gladys-hello",
+            "fr": "ex. gladys-bonjour",
+            "de": "z. B. gladys-hallo",
+            "es": "p. ej. gladys-hola"
+          },
+          "required": true
+        },
+        {
+          "key": "body",
+          "type": "string",
+          "label": {
+            "en": "Body (JSON or text)",
+            "fr": "Corps (JSON ou texte)",
+            "de": "Inhalt (JSON oder Text)",
+            "es": "Cuerpo (JSON o texto)"
+          },
+          "description": {
+            "en": "Sent as is when it is JSON, otherwise as {\"text\": …}. Scene values can be inserted.",
+            "fr": "Envoyé tel quel s'il est en JSON, sinon sous la forme {\"text\": …}. Les valeurs de la scène peuvent y être insérées.",
+            "de": "Unverändert gesendet, wenn es JSON ist, sonst als {\"text\": …}. Werte der Szene können eingefügt werden.",
+            "es": "Se envía tal cual si es JSON; si no, como {\"text\": …}. Se pueden insertar valores de la escena."
+          },
+          "placeholder": {
+            "en": "e.g. {\"room\": \"living room\"}",
+            "fr": "ex. {\"piece\": \"salon\"}",
+            "de": "z. B. {\"raum\": \"Wohnzimmer\"}",
+            "es": "p. ej. {\"sala\": \"salón\"}"
+          },
+          "required": false
+        }
+      ],
+      "outputs": [
+        {
+          "key": "success",
+          "type": "boolean",
+          "label": {
+            "en": "Answered successfully",
+            "fr": "Réponse réussie",
+            "de": "Erfolgreich beantwortet",
+            "es": "Respuesta correcta"
+          }
+        },
+        {
+          "key": "status",
+          "type": "number",
+          "label": {
+            "en": "HTTP status (0: no answer in time)",
+            "fr": "Statut HTTP (0 : pas de réponse à temps)",
+            "de": "HTTP-Status (0: keine Antwort rechtzeitig)",
+            "es": "Estado HTTP (0: sin respuesta a tiempo)"
+          }
+        },
+        {
+          "key": "message",
+          "type": "string",
+          "label": {
+            "en": "Message answered",
+            "fr": "Message répondu",
+            "de": "Antwortnachricht",
+            "es": "Mensaje de respuesta"
+          }
+        },
+        {
+          "key": "response",
+          "type": "string",
+          "label": {
+            "en": "Full answer",
+            "fr": "Réponse complète",
+            "de": "Vollständige Antwort",
+            "es": "Respuesta completa"
+          }
+        }
+      ]
+    },
+    {
+      "key": "get_workflow_status",
+      "label": {
+        "en": "State of a workflow",
+        "fr": "État d'un workflow",
+        "de": "Zustand eines Workflows",
+        "es": "Estado de un workflow"
+      },
+      "description": {
+        "en": "Reads the state of a workflow for the next actions: last execution, failures in 24 h, last error, and a ready-made sentence.",
+        "fr": "Lit l'état d'un workflow pour les actions suivantes : dernière exécution, échecs sur 24 h, dernière erreur, et une phrase toute faite.",
+        "de": "Liest den Zustand eines Workflows für die nächsten Aktionen: letzte Ausführung, Fehlschläge in 24 h, letzter Fehler und ein fertiger Satz.",
+        "es": "Lee el estado de un workflow para las acciones siguientes: última ejecución, fallos en 24 h, último error y una frase preparada."
+      },
+      "timeout_seconds": 30,
       "fields": [
         {
           "key": "device",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
+          "label": {
+            "en": "Workflow",
+            "fr": "Workflow",
+            "de": "Workflow",
+            "es": "Workflow"
+          },
           "required": true
         }
       ],
       "outputs": [
         {
-          "key": "signalled",
+          "key": "active",
           "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "label": {
+            "en": "Active",
+            "fr": "Actif",
+            "de": "Aktiv",
+            "es": "Activo"
+          }
+        },
+        {
+          "key": "failed",
+          "type": "boolean",
+          "label": {
+            "en": "Last execution failed",
+            "fr": "Dernière exécution en échec",
+            "de": "Letzte Ausführung fehlgeschlagen",
+            "es": "Última ejecución fallida"
+          }
+        },
+        {
+          "key": "state",
+          "type": "string",
+          "label": {
+            "en": "State",
+            "fr": "État",
+            "de": "Zustand",
+            "es": "Estado"
+          }
+        },
+        {
+          "key": "failures_24h",
+          "type": "number",
+          "label": {
+            "en": "Failures in 24 h",
+            "fr": "Échecs sur 24 h",
+            "de": "Fehlschläge in 24 h",
+            "es": "Fallos en 24 h"
+          }
+        },
+        {
+          "key": "last_run",
+          "type": "string",
+          "label": {
+            "en": "Last run",
+            "fr": "Dernier lancement",
+            "de": "Letzter Start",
+            "es": "Último inicio"
+          }
+        },
+        {
+          "key": "duration",
+          "type": "number",
+          "label": {
+            "en": "Last run duration (s)",
+            "fr": "Durée de la dernière exécution (s)",
+            "de": "Dauer der letzten Ausführung (s)",
+            "es": "Duración de la última ejecución (s)"
+          }
+        },
+        {
+          "key": "error",
+          "type": "string",
+          "label": {
+            "en": "Last error",
+            "fr": "Dernière erreur",
+            "de": "Letzter Fehler",
+            "es": "Último error"
+          }
+        },
+        {
+          "key": "sentence",
+          "type": "string",
+          "label": {
+            "en": "Sentence",
+            "fr": "Phrase",
+            "de": "Satz",
+            "es": "Frase"
+          }
+        }
+      ]
+    },
+    {
+      "key": "activate_workflow",
+      "label": {
+        "en": "Activate a workflow",
+        "fr": "Activer un workflow",
+        "de": "Workflow aktivieren",
+        "es": "Activar un workflow"
+      },
+      "description": {
+        "en": "Activates (publishes) a workflow: its triggers listen again.",
+        "fr": "Active (publie) un workflow : ses déclencheurs écoutent de nouveau.",
+        "de": "Aktiviert (veröffentlicht) einen Workflow: Seine Auslöser hören wieder zu.",
+        "es": "Activa (publica) un workflow: sus disparadores vuelven a escuchar."
+      },
+      "timeout_seconds": 30,
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Workflow",
+            "fr": "Workflow",
+            "de": "Workflow",
+            "es": "Workflow"
+          },
+          "required": true
+        }
+      ]
+    },
+    {
+      "key": "deactivate_workflow",
+      "label": {
+        "en": "Deactivate a workflow",
+        "fr": "Désactiver un workflow",
+        "de": "Workflow deaktivieren",
+        "es": "Desactivar un workflow"
+      },
+      "description": {
+        "en": "Deactivates a workflow, for example during the holidays: its triggers stop.",
+        "fr": "Désactive un workflow, par exemple pendant les vacances : ses déclencheurs s'arrêtent.",
+        "de": "Deaktiviert einen Workflow, zum Beispiel im Urlaub: Seine Auslöser stoppen.",
+        "es": "Desactiva un workflow, por ejemplo durante las vacaciones: sus disparadores se detienen."
+      },
+      "timeout_seconds": 30,
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": {
+            "en": "Workflow",
+            "fr": "Workflow",
+            "de": "Workflow",
+            "es": "Workflow"
+          },
+          "required": true
         }
       ]
     }
   ],
   "widgets": [
     {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
+      "key": "n8n",
+      "label": {
+        "en": "n8n workflows",
+        "fr": "Workflows n8n",
+        "de": "n8n-Workflows",
+        "es": "Workflows de n8n"
       },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "description": {
+        "en": "Failing workflows first, then the running ones, then the others, with their last execution.",
+        "fr": "Les workflows en échec d'abord, puis ceux en cours, puis les autres, avec leur dernière exécution.",
+        "de": "Zuerst die fehlschlagenden Workflows, dann die laufenden und die übrigen, mit letzter Ausführung.",
+        "es": "Primero los workflows con error, luego los que están en curso y los demás, con su última ejecución."
+      },
+      "icon": "share-2",
+      "action_timeout_seconds": 60,
+      "settings": [
+        {
+          "key": "workflows",
+          "type": "multi_select",
+          "source": "devices",
+          "label": {
+            "en": "Workflows (empty: the active ones)",
+            "fr": "Workflows (vide : les actifs)",
+            "de": "Workflows (leer: die aktiven)",
+            "es": "Workflows (vacío: los activos)"
+          },
+          "description": {
+            "en": "Empty: every active workflow. Only the devices added to Gladys can be chosen.",
+            "fr": "Vide : tous les workflows actifs. Seuls les appareils ajoutés à Gladys peuvent être choisis.",
+            "de": "Leer: alle aktiven Workflows. Nur die zu Gladys hinzugefügten Geräte sind wählbar.",
+            "es": "Vacío: todos los workflows activos. Solo se pueden elegir los dispositivos añadidos a Gladys."
+          },
+          "required": false
+        }
+      ]
     }
   ]
 }
