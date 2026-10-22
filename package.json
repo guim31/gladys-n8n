@@ -1,6 +1,6 @@
 {
   "name": "gladys-n8n",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "n8n workflows in Gladys Assistant: start them from a scene, react when one fails.",
   "type": "module",

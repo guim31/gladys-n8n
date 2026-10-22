@@ -8,8 +8,8 @@
     "de": "Deine n8n-Workflows in Gladys: Starte sie aus einer Szene, reagiere, wenn einer fehlschlägt.",
     "es": "Sus workflows de n8n en Gladys: láncelos desde una escena, reaccione cuando uno falle."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/guim31/gladys-n8n:1.0.0",
+  "version": "1.0.1",
+  "docker_image": "ghcr.io/guim31/gladys-n8n:1.0.1",
   "gladys_version": ">=5.1.0",
   "cover_image": "https://raw.githubusercontent.com/guim31/gladys-n8n/main/cover.png",
   "categories": ["services"],
